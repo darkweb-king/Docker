@@ -1,15 +1,16 @@
-# Use Ubuntu as the base image for a familiar Linux environment
+# Use Ubuntu 22.04 as the base image
 FROM ubuntu:22.04
 
-# Set environment variables to avoid interactive prompts during installation
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install necessary tools and dependencies
+# Install necessary tools, networking utilities, and SSH server
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     wget \
     vim \
+    nano \
     python3 \
     python3-pip \
     nodejs \
@@ -19,7 +20,18 @@ RUN apt-get update && apt-get install -y \
     libjson-c-dev \
     libwebsockets-dev \
     tini \
+    net-tools \
+    iproute2 \
+    iputils-ping \
+    openssh-server \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH for root access (Username: root, Password: root)
+RUN mkdir /var/run/sshd && \
+    echo 'root:root' | chpasswd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/session    required     pam_loginuid.so/session    optional     pam_loginuid.so/g' /etc/pam.d/sshd
 
 # Install ttyd (Web-based terminal)
 RUN ARCH=$(uname -m) && \
@@ -32,22 +44,31 @@ RUN ARCH=$(uname -m) && \
 # Set the working directory
 WORKDIR /root
 
-# Create a welcome message that appears when the terminal starts
+# Create the requested welcome message
 RUN echo 'echo "========================================"\n\
-echo "      Web Terminal Ready to Use         "\n\
-echo "========================================"' >> /root/.bashrc
+echo "      The Abhi terminal Redy            "\n\
+echo "========================================"\n\
+echo "Networking: Use '\''ifconfig'\'' to see IP"\n\
+echo "Shortcuts: Ctrl+C, Ctrl+X, Ctrl+S are enabled."' >> /root/.bashrc
 
-# Render uses a dynamic PORT environment variable.
-# We add credentials 'root:root' as requested.
+# Create a startup script
+# Web login is REMOVED for direct access
 RUN echo '#!/bin/sh\n\
-ttyd -p ${PORT:-7681} -c root:root -W bash' > /usr/local/bin/start-terminal.sh && \
+# Start SSH server\n\
+/usr/sbin/sshd\n\
+\n\
+# Start ttyd without password\n\
+# -W allows writing to the terminal\n\
+# -t enableZmodem=true for file transfers\n\
+# -t fontSize=14 for readability\n\
+ttyd -p ${PORT:-7681} -t enableZmodem=true -t fontSize=14 -W bash' > /usr/local/bin/start-terminal.sh && \
     chmod +x /usr/local/bin/start-terminal.sh
 
-# Expose the default port
-EXPOSE 7681
+# Expose ports
+EXPOSE 22 7681
 
 # Use tini as an init process
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Start the terminal
+# Start the services
 CMD ["/usr/local/bin/start-terminal.sh"]
